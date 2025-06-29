@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Ad Server VAST Tag Transformer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    label {
+      display: inline-block;
+      width: 150px;
+      margin-bottom: 8px;
+    }
+    select,
+    input[type="text"],
+    textarea {
+      width: 50%;
+      padding: 6px;
+      margin-bottom: 12px;
+    }
+    button {
+      padding: 8px 16px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    .output-area {
+      margin-top: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      margin-top: 20px;
+      width: 100%;
+    }
+    th,
+    td {
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+    }
+    th {
+      background-color: #f5f5f5;
+    }
+    .compare-table {
+      margin-bottom: 30px;
+    }
+  
+    /* 
+     * Flex container for side-by-side tables
+     * The parent can scroll if total width exceeds page
+     */
+    #tablesContainer {
+      display: flex;
+      flex-wrap: nowrap; /* keep side by side */
+      gap: 20px;
+      margin-top: 20px;
+      overflow-x: auto;  /* horizontal scroll if needed */
+    }
+  
+    #comparisonTableContainer,
+    #lookupTableContainer {
+      width: 50%;
+      box-sizing: border-box;
+    }
+  
+    #comparisonTableContainer {
+      overflow-x: auto; /* if the comparison table is too wide, it scrolls */
+    }
+    /* 
+     * If you want the lookup table to scroll horizontally if needed:
+     * (But we’ll let it wrap text, so you might not need horizontal scroll.)
+     */
+    #lookupTableContainer {
+      overflow-x: auto;
+      padding-left: 20px;
+    }
+  
+    /* Section for removing keys post-transformation */
+    #removeKeysSection {
+      margin-top: 30px;
+      border-top: 1px solid #ccc;
+      padding-top: 20px;
+    }
+  
+    /* ------------------------------------------------
+     *  COMPARISON TABLE (left side) column widths
+     * ------------------------------------------------*/
+    .compare-table {
+      width: 100%;
+      
+    }
+  
+    /* Param Key column = 25%, Before = 25%, After = 50% */
+    .compare-table th:nth-child(1),
+    .compare-table td:nth-child(1) {
+      width: 25%;
+    }
+    .compare-table th:nth-child(2),
+    .compare-table td:nth-child(2) {
+      width: 25%;
+    }
+    .compare-table th:nth-child(3),
+    .compare-table td:nth-child(3) {
+      width: 50%;
+    }
+  
+    /* 
+     * For the comparison table, keep single line + ellipsis:
+     * (This affects ALL .compare-table by default)
+     */
+    .compare-table th,
+    .compare-table td {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap; 
+    }
+  
+    /* ------------------------------------------------
+     *  LOOKUP TABLE (right side) OVERRIDE:
+     *  Allow wrapping so the text won't be cut off
+     * ------------------------------------------------*/
+    #lookupTableContainer .compare-table th,
+    #lookupTableContainer .compare-table td {
+      /* override the single-line rule */
+      overflow: visible;
+      text-overflow: unset; /* or 'clip' if you prefer */
+      white-space: normal;  /* allow multi-line wrapping */
+    }
+  </style>
+  
+  
+</head>
+<body>
+  <h2>Ad Server VAST Tag Transformer</h2>
+
+  <!-- 1) Choose Ad Server -->
+  <div>
+    <label for="adServerSelect">Ad Server:</label>
+    <select id="adServerSelect">
+      <option value="freewheel">Freewheel</option>
+      <option value="gam">Google Ad Manager</option>
+      <option value="springserve">SpringServe</option>
+      <option value="publica">Publica</option>
+    </select>
+  </div>
+
+  <!-- 2) Input your current VAST tag URL -->
+  <div>
+    <label for="vastUrlInput">VAST Tag URL:</label>
+    <input type="text" id="vastUrlInput" placeholder="Paste your VAST tag URL here">
+  </div>
+
+  <!-- 3) Transform Button -->
+  <div>
+    <button id="transformBtn">Transform</button>
+  </div>
+
+  <!-- 4) Output area for the new URL (first transformation) -->
+  <div class="output-area">
+    <label for="outputUrl">Transformed URL:</label><br>
+    <textarea id="outputUrl" rows="4" readonly></textarea>
+  </div>
+
+  <!-- 5) Container for side-by-side tables (comparison + your macro lookup) -->
+  <div id="tablesContainer">
+    <div id="comparisonTableContainer"></div>
+
+    <div id="lookupTableContainer">
+      <h3>Macro Configuration for Inventory System Tags</h3>
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Keys for PSI Tag</th>
+            <th>Integration Type</th>
+            <th>Content Type</th>
+            <th>FW Parameter</th>
+            <th>GAM Parameter</th>
+            <th>Springserve Parameter</th>
+            <th>Publica Parameter</th>
+            <th>Macro</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- FULL TABLE ROWS (No skipping) -->
+          <tr>
+            <td>Channel SCTE</td>
+            <td>Both</td>
+            <td>Linear</td>
+            <td>CAID</td>
+            <td>N/A</td>
+            <td></td>
+            <td></td>
+            <td>OTT_PARTNER_TITLE_ID_SCTE</td>
+            <td>Dependent on partner, we may want a SCTE value instead of regular partner title id...</td>
+          </tr>
+          <tr>
+            <td>Channel Ad ID</td>
+            <td>Both</td>
+            <td>Linear</td>
+            <td>CAID/CSID</td>
+            <td>iu=</td>
+            <td></td>
+            <td></td>
+            <td>OTT_PARTNER_TITLE_ID</td>
+            <td>To provide regular partner title id for partners that can't send dynamically...</td>
+          </tr>
+          <tr>
+            <td>Platform</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>Could be an element in prof= or CSID<br>Could be an element in iu=</td>
+            <td>device_type=</td>
+            <td></td>
+            <td></td>
+            <td>OTT_PLATFORM_TYPE</td>
+            <td>Doesn't have a dedicated parameter but could be a part of ad unit path.</td>
+          </tr>
+          <tr>
+            <td>App Bundle</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_app_bundle=</td>
+            <td>msid=</td>
+            <td>app_bundle=</td>
+            <td>app_bundle=</td>
+            <td>HARDCODED</td>
+            <td>This should be the TRC Bundle ID 151908.</td>
+          </tr>
+          <tr>
+            <td>App Name</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_app_name=</td>
+            <td>an=</td>
+            <td>app_name=</td>
+            <td>app_name=</td>
+            <td>HARDCODED</td>
+            <td>Just Partner Name (i.e. AMC) - not full channel title. Hardcode Roku for FW</td>
+          </tr>
+          <tr>
+            <td>App Store URL</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_app_store_url</td>
+            <td>description_url=</td>
+            <td>url=</td>
+            <td>ipd=</td>
+            <td>HARDCODED</td>
+            <td>Hardcode therokuchannel.com</td>
+          </tr>
+          <tr>
+            <td>Device ID</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_did,_fw_vcid2</td>
+            <td>rdid=, sid=</td>
+            <td>did=</td>
+            <td>did=</td>
+            <td>ROKU_ADS_TRACKING_ID</td>
+            <td>Use full RIDA macro...</td>
+          </tr>
+          <tr>
+            <td>Do Not Track</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_is_lat=</td>
+            <td>is_lat=</td>
+            <td>dnt=</td>
+            <td>is_lat=</td>
+            <td>OTT_ADS_LIMIT_TRACKING</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>Limit Ad Tracking</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_is_lat=</td>
+            <td>is_lat=</td>
+            <td>lmt=</td>
+            <td></td>
+            <td>OTT_ADS_LIMIT_TRACKING</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>User Agent</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_h_user_agent=</td>
+            <td>ua=</td>
+            <td>ua=</td>
+            <td>ua=</td>
+            <td>OTT_USER_AGENT</td>
+            <td>Should be encoded.</td>
+          </tr>
+          <tr>
+            <td>US Privacy</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_us_privacy=</td>
+            <td>us_privacy=</td>
+            <td>us_privacy=</td>
+            <td>us_privacy=</td>
+            <td>OTT_US_PRIVACY</td>
+            <td>Only US/California</td>
+          </tr>
+          <tr>
+            <td>COPPA</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_coppa=</td>
+            <td>tfcd=</td>
+            <td>coppa=</td>
+            <td>coppa=</td>
+            <td>ROKU_ADS_KIDS_CONTENT</td>
+            <td>Confirmed with Product that OTT macro will not work for this - use Roku.</td>
+          </tr>
+          <tr>
+            <td>Cachebuster</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>vprn=, pvrn=</td>
+            <td>correlator=, scor=, ord=, cb=</td>
+            <td>cb=</td>
+            <td>cb=</td>
+            <td>OTT_ADS_TIMESTAMP</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>Width</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_player_width=</td>
+            <td>w=</td>
+            <td>player_width=</td>
+            <td>player_width=</td>
+            <td>HARDCODED</td>
+            <td>1920</td>
+          </tr>
+          <tr>
+            <td>Height</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_player_height=</td>
+            <td>h=</td>
+            <td>player_height=</td>
+            <td>player_height=</td>
+            <td>HARDCODED</td>
+            <td>1080</td>
+          </tr>
+          <tr>
+            <td>IFA Type</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_did=</td>
+            <td>idtype=</td>
+            <td>ifa_type=</td>
+            <td>ifa_type=</td>
+            <td>HARDCODED</td>
+            <td>RIDA. For Freewheel, this is only the first part of the _fw_did= parameter (&_fw_did=[IFA_TYPE]:[DID])</td>
+          </tr>
+          <tr>
+            <td>IP Address</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>vip=</td>
+            <td>ip=</td>
+            <td>ip=</td>
+            <td>ip=</td>
+            <td>OTT_IP</td>
+            <td>Use full IP address macro...</td>
+          </tr>
+          <tr>
+            <td>Flag</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>flag=</td>
+            <td>N/A</td>
+            <td>N/A</td>
+            <td></td>
+            <td>HARDCODED</td>
+            <td>Encode populated parameter...</td>
+          </tr>
+          <tr>
+            <td>Channel Name</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>N/A</td>
+            <td>channel=</td>
+            <td>channel_name=</td>
+            <td>content_channel=</td>
+            <td>OTT_PARTNER_TITLE_ID</td>
+            <td>Just Partner Name (i.e. AMC) - not full channel title.</td>
+          </tr>
+          <tr>
+            <td>Content Genre</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_content_genre=</td>
+            <td>genre=</td>
+            <td>content_genre=</td>
+            <td>content_genre=</td>
+            <td>OTT_CONTENT_GENRE</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>Content Language</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_content_language=</td>
+            <td>hl=</td>
+            <td>language=</td>
+            <td>language=</td>
+            <td>OTT_CONTENT_LANGUAGE</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>Content Rating</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_content_rating=</td>
+            <td>rating=</td>
+            <td>rating=</td>
+            <td>content_rating=</td>
+            <td>OTT_CONTENT_RATING</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>Network Name</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td></td>
+            <td>network=</td>
+            <td>network_name=</td>
+            <td></td>
+            <td>OTT_STUDIO_ID</td>
+            <td>Not exact macro, but this is the closest</td>
+          </tr>
+          <tr>
+            <td>Content Live Stream</td>
+            <td>Both</td>
+            <td>Linear</td>
+            <td></td>
+            <td></td>
+            <td>content_livestream=</td>
+            <td>livestream=</td>
+            <td>HARDCODED</td>
+            <td>Just '1' hard coded for true.</td>
+          </tr>
+          <tr>
+            <td>Content Length</td>
+            <td>Both</td>
+            <td>Both</td>
+            <td>_fw_content_length,vdur</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>OTT_CONTENT_LENGTH</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>Pod Max Duration</td>
+            <td>PSI</td>
+            <td>Both</td>
+            <td>maxd=</td>
+            <td>pmxd=</td>
+            <td>pod_max_dur=</td>
+            <td></td>
+            <td>OTT_POD_MAX_SEC</td>
+            <td>Critical for PSI Remnant Call. Default values differ based on ad server.</td>
+          </tr>
+          <tr>
+            <td>Slot</td>
+            <td>Both</td>
+            <td>Linear</td>
+            <td>slid=</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>HARDCODED</td>
+            <td>Hardcode "midroll" - Vevo asked us to insert cachebuster macro here</td>
+          </tr>
+          <tr>
+            <td>Pod Max Ads</td>
+            <td>PSI</td>
+            <td>Both</td>
+            <td>maxa=</td>
+            <td>pmad=</td>
+            <td>pod_ad_slots=</td>
+            <td></td>
+            <td>OTT_PARTNER_REMNANT_POD_ADS</td>
+            <td>Critical for PSI Remnant Call. Hardcode 6 for Standard Call.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- (6) Second Step: Remove Keys from the Transformed URL -->
+  <div id="removeKeysSection">
+    <h3>Remove Additional Keys</h3>
+    <label for="keysToRemoveSelect">Select Keys to Remove:</label><br>
+    <!-- Multi-select so user can remove multiple keys at once -->
+    <select id="keysToRemoveSelect" multiple size="5"></select><br><br>
+    <button id="removeKeysBtn">Remove Selected Keys</button>
+  </div>
+
+  <!-- (7) Final Output after removing selected keys -->
+  <div class="output-area">
+    <label for="finalUrl">Final URL (After Key Removal):</label><br>
+    <textarea id="finalUrl" rows="4" readonly></textarea>
+  </div>
+  <script>
+    /***********************************************
+     *  GLOBAL STATE for Live Edits
+     ***********************************************/
+    let globalPostParams = {};
+    let globalBaseUrl = '';
+  
+    /***********************************************
+     * 1) TABLE ROW DEFINITIONS (same as before)
+     ***********************************************/
+    const tableRows = [
+      { name: "Channel SCTE", fwParam: ["caid"], gamParam: [], springParam: [], publicaParam: [], macro: "OTT_PARTNER_TITLE_ID_SCTE", notes: "" },
+      { name: "Channel Ad ID", fwParam: ["caid","csid"], gamParam: ["iu"], springParam: [], publicaParam: [], macro: "OTT_PARTNER_TITLE_ID", notes: "" },
+      { name: "Platform", fwParam: ["prof"], gamParam: ["iu"], springParam: ["device_type"], publicaParam: [], macro: "OTT_PLATFORM_TYPE", notes: "" },
+      { name: "App Bundle", fwParam: ["_fw_app_bundle"], gamParam: ["msid"], springParam: ["app_bundle"], publicaParam: ["app_bundle"], macro: "151908", notes: "" },
+      { name: "App Name", fwParam: ["_fw_app_name"], gamParam: ["an"], springParam: ["app_name"], publicaParam: ["app_name"], macro: "HARDCODED", notes: "HARDCODED" },
+      { name: "App Store URL", fwParam: ["_fw_app_store_url"], gamParam: ["app_store_url"], springParam: ["app_store_url"], publicaParam: ["app_store_url"], macro: "therokuchannel.com", notes: "" },
+      { name: "Device ID", fwParam: ["_fw_did","_fw_vcid2"], gamParam: ["rdid","sid"], springParam: ["did"], publicaParam: ["did"], macro: "ROKU_ADS_TRACKING_ID", notes: "" },
+      { name: "Do Not Track", fwParam: ["_fw_is_lat"], gamParam: ["is_lat"], springParam: ["dnt"], publicaParam: ["is_lat"], macro: "OTT_ADS_LIMIT_TRACKING", notes: "" },
+      { name: "Limit Ad Tracking", fwParam: [], gamParam: ["is_lat"], springParam: ["lmt"], publicaParam: ["is_lat"], macro: "OTT_ADS_LIMIT_TRACKING", notes: "" },
+      { name: "User Agent", fwParam: ["_fw_h_user_agent"], gamParam: ["ua"], springParam: ["ua"], publicaParam: ["ua"], macro: "OTT_USER_AGENT", notes: "" },
+      { name: "US Privacy", fwParam: ["_fw_us_privacy"], gamParam: ["us_privacy"], springParam: ["us_privacy"], publicaParam: ["us_privacy"], macro: "OTT_US_PRIVACY", notes: "" },
+      { name: "COPPA", fwParam: ["_fw_coppa"], gamParam: ["tfcd"], springParam: ["coppa"], publicaParam: ["coppa"], macro: "ROKU_ADS_KIDS_CONTENT", notes: "" },
+      { name: "Cachebuster", fwParam: ["vprn","pvrn"], gamParam: ["cb"], springParam: ["cb"], publicaParam: ["cb"], macro: "OTT_ADS_TIMESTAMP", notes: "" },
+      { name: "Width", fwParam: ["_fw_player_width"], gamParam: [], springParam: ["w"], publicaParam: ["player_width"], macro: "1920", notes: "" },
+      { name: "Height", fwParam: ["_fw_player_height"], gamParam: [], springParam: ["h"], publicaParam: ["player_height"], macro: "1080", notes: "" },
+      { name: "IFA Type", fwParam: [], gamParam: ["ifa_type"], springParam: ["ifa_type"], publicaParam: ["ifa_type"], macro: "RIDA", notes: "HARDCODED" },
+      { name: "IP Address", fwParam: ["vip"], gamParam: ["ip"], springParam: ["ip"], publicaParam: ["ip"], macro: "OTT_IP", notes: "" },
+      { name: "Flag", fwParam: ["flag"], gamParam: [], springParam: [], publicaParam: [], macro: "HARDCODED", notes: "HARDCODED" },
+      { name: "Channel Name", fwParam: [], gamParam: ["channel"], springParam: ["channel_name"], publicaParam: ["content_channel"], macro: "OTT_PARTNER_TITLE_ID", notes: "OTT_PARTNER_TITLE_ID" },
+      { name: "Content Genre", fwParam: ["_fw_content_genre"], gamParam: ["genre"], springParam: ["content_genre"], publicaParam: ["content_genre"], macro: "OTT_CONTENT_GENRE", notes: "" },
+      { name: "Content Language", fwParam: ["_fw_content_language"], gamParam: ["hl"], springParam: ["language"], publicaParam: ["language"], macro: "OTT_CONTENT_LANGUAGE", notes: "" },
+      { name: "Content Rating", fwParam: ["_fw_content_rating"], gamParam: ["rating"], springParam: ["rating"], publicaParam: ["rating"], macro: "OTT_CONTENT_RATING", notes: "" },
+      { name: "Network Name", fwParam: ["network"], gamParam: ["network"], springParam: ["network_name"], publicaParam: ["network"], macro: "HARDCODED", notes: "HARDCODED" },
+      { name: "Content Live Stream", fwParam: [], gamParam: [], springParam: ["livestream"], publicaParam: ["livestream"], macro: "HARDCODED", notes: "HARDCODED" },
+      { name: "Content Length", fwParam: ["vdur"], gamParam: [], springParam: [], publicaParam: ["content_length"], macro: "OTT_CONTENT_LENGTH", notes: "" },
+      { name: "Pod Max Duration", fwParam: ["maxd"], gamParam: ["pmxd"], springParam: ["pod_max_dur"], publicaParam: [], macro: "OTT_POD_MAX_SEC", notes: "" },
+      { name: "Slot", fwParam: ["slid"], gamParam: [], springParam: [], publicaParam: [], macro: "HARDCODED", notes: "HARDCODED" },
+      { name: "Pod Max Ads", fwParam: ["maxa"], gamParam: ["pmad"], springParam: ["pod_ad_slots"], publicaParam: [], macro: "OTT_POD_ADS", notes: "" },
+      
+      
+    ];
+  
+    /***********************************************
+     * 2) PARSE/BUILD URL HELPERS
+     ***********************************************/
+    function parseQueryString(url) {
+      const [base, query] = url.split('?');
+      if (!query) return {};
+      const pairs = query.split('&');
+      const params = {};
+      pairs.forEach(pair => {
+        if (!pair) return;
+        const [k, v] = pair.split('=');
+        params[k] = v || '';
+      });
+      return params;
+    }
+  
+    function buildUrl(baseUrl, params) {
+      const queryString = Object.entries(params)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('&');
+      return queryString ? baseUrl + '?' + queryString : baseUrl;
+    }
+  
+    function getAdServerParamName(row, adServer) {
+      switch (adServer) {
+        case 'freewheel':   return row.fwParam;
+        case 'gam':         return row.gamParam;
+        case 'springserve': return row.springParam;
+        case 'publica':     return row.publicaParam;
+        default:            return null;
+      }
+    }
+  
+    /***********************************************
+     * 3) APPLY TABLE ROW REPLACEMENTS (macros)
+     ***********************************************/
+    function applyTableRowReplacements(currentParams, finalAdServer) {
+      const lowerCaseKeyMap = {};
+      Object.keys(currentParams).forEach(k => {
+        lowerCaseKeyMap[k.toLowerCase()] = k;
+      });
+  
+      for (let row of tableRows) {
+        const paramKeys = getAdServerParamName(row, finalAdServer);
+        if (!paramKeys) continue;
+  
+        const isHardcoded = (row.notes === "HARDCODED");
+        paramKeys.forEach(key => {
+          if (!key) return;
+          const lowerKey = key.toLowerCase();
+  
+          if (isHardcoded) {
+            // If you want to set a default hardcoded value, you could do so here.
+            // e.g. currentParams[key] = "MY_HARDCODED_VALUE";
+            return;  
+          }
+  
+          if (lowerKey in lowerCaseKeyMap) {
+            const actualKey = lowerCaseKeyMap[lowerKey];
+            const existingValue = currentParams[actualKey] || '';
+            // Replace only if it's obviously a placeholder (contains { } or [ ])
+            if (existingValue.includes('{') || existingValue.includes('[')) {
+              currentParams[actualKey] = row.macro;
+            }
+          } else {
+            // The param doesn't exist yet; set it
+            currentParams[key] = row.macro;
+            lowerCaseKeyMap[lowerKey] = key;
+          }
+        });
+      }
+    }
+  
+    /***********************************************
+     * 4) OPTIONAL FREEWHEEL CUSTOM FIX
+     ***********************************************/
+    function customFreewheelFlagFix(params) {
+      let fv = params.flag;
+      if (!fv) return;  // no flag => do nothing
+  
+      // 1) capture the values from top-level if they exist
+      const userAgentVal = params['_fw_h_user_agent'] || 'OTT_USER_AGENT';
+      const vcid2Val     = params['_fw_vcid2']        || 'ROKU_ADS_TRACKING_ID';
+  
+      // 2) remove them from the top-level so they won't appear outside flag
+      delete params['_fw_h_user_agent'];
+      delete params['_fw_vcid2'];
+  
+      // 3) remove any `_fw_h_user_agent=...` or `_fw_vcid2=...` inside flag
+      fv = fv.replace(/_fw_h_user_agent[^&]*/g, '');
+      fv = fv.replace(/_fw_vcid2[^&]*/g, '');
+  
+      // 4) encode plus signs => %2B if needed
+      fv = fv.replace(/\+/g, '%2B');
+  
+      // 5) trim leftover double semicolons
+      fv = fv.replace(/;+/, ';').replace(/;$/, '');
+  
+      // 6) append new part
+      if (fv && !fv.endsWith(';')) {
+        fv += ';';
+      }
+      fv += `_fw_vcid2=${vcid2Val}&_fw_h_user_agent=${userAgentVal}`;
+  
+      params.flag = fv;
+    }
+  
+    /***********************************************
+     * 5) ORCHESTRATION: transformUrl
+     ***********************************************/
+    function transformUrl(userAdServer, url) {
+      const [baseUrl] = url.split('?');
+      const preParams = parseQueryString(url);
+      const postParams = { ...preParams };
+  
+      // 1) Macro replacements
+      applyTableRowReplacements(postParams, userAdServer);
+  
+      // 2) If Freewheel, do custom fix
+      if (userAdServer === 'freewheel') {
+        customFreewheelFlagFix(postParams);
+      }
+  
+      // 3) Build final
+      const newUrl = buildUrl(baseUrl, postParams);
+      return { newUrl, preParams, postParams, baseUrl }; 
+    }
+  
+    /***********************************************
+     * 6) BUILD COMPARISON TABLE (WITH EDITABLE INPUTS)
+     ***********************************************/
+    function buildComparisonTable(preParams, postParams) {
+      const allKeys = new Set([...Object.keys(preParams), ...Object.keys(postParams)]);
+      let tableHtml = `
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Param Key</th>
+              <th>Before (Original)</th>
+              <th>After (Transformed)</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+  
+      allKeys.forEach(key => {
+        const beforeVal = preParams[key] || '';
+        const afterVal = postParams[key] || '';
+        tableHtml += `
+          <tr>
+            <td>${key}</td>
+            <td>${beforeVal}</td>
+            <td>
+              <input
+                type="text"
+                value="${afterVal}"
+                data-key="${key}"
+                class="post-transformed-input"
+              />
+            </td>
+          </tr>
+        `;
+      });
+  
+      tableHtml += `</tbody></table>`;
+      return tableHtml;
+    }
+  
+    /***********************************************
+     * 7) ATTACH LISTENERS TO "AFTER" COLUMN INPUTS
+     ***********************************************/
+    function attachComparisonTableListeners() {
+      const inputs = document.querySelectorAll('.post-transformed-input');
+      inputs.forEach(input => {
+        input.addEventListener('change', () => {
+          const paramKey = input.dataset.key;
+          const paramVal = input.value;
+  
+          // Update the global postParams
+          globalPostParams[paramKey] = paramVal;
+  
+          // Rebuild the transformed URL
+          const updatedUrl = buildUrl(globalBaseUrl, globalPostParams);
+  
+          // Update the UI
+          document.getElementById('outputUrl').value = updatedUrl;
+  
+          // Also update the "keys to remove" dropdown
+          populateKeysDropdown(globalPostParams);
+        });
+      });
+    }
+  
+    /***********************************************
+     * 8) BUTTON: TRANSFORM
+     ***********************************************/
+    const transformBtn = document.getElementById('transformBtn');
+    transformBtn.addEventListener('click', function () {
+      const userAdServer = document.getElementById('adServerSelect').value;
+      const vastUrlInput = document.getElementById('vastUrlInput').value.trim();
+      if (!vastUrlInput) {
+        alert('Please provide a VAST Tag URL.');
+        return;
+      }
+  
+      // 1) Transform
+      const { newUrl, preParams, postParams, baseUrl } = transformUrl(userAdServer, vastUrlInput);
+  
+      // 2) Store in global state
+      globalBaseUrl = baseUrl;
+      globalPostParams = postParams;
+  
+      // 3) Show new URL
+      document.getElementById('outputUrl').value = newUrl;
+      saveTagToBackend(vastUrlInput, newUrl, userAdServer);
+  
+      // 4) Build side-by-side comparison table (with editable inputs)
+      const tableHtml = buildComparisonTable(preParams, postParams);
+      document.getElementById('comparisonTableContainer').innerHTML =
+        `<h3>Parameter Comparison</h3>${tableHtml}`;
+  
+      // 5) Attach change listeners to newly created inputs
+      attachComparisonTableListeners();
+  
+      // 6) Populate the remove-keys dropdown from the new postParams
+      populateKeysDropdown(postParams);
+    });
+  
+    /***********************************************
+     * 9) POPULATE DROPDOWN WITH KEYS
+     ***********************************************/
+    function populateKeysDropdown(paramsObj) {
+      const keysToRemoveSelect = document.getElementById('keysToRemoveSelect');
+      keysToRemoveSelect.innerHTML = ''; // clear old options
+  
+      // Populate each param key as a selectable <option>
+      Object.keys(paramsObj).forEach(key => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = key;
+        keysToRemoveSelect.appendChild(option);
+      });
+    }
+  
+    /***********************************************
+     * 10) REMOVE SELECTED KEYS
+     ***********************************************/
+    const removeKeysBtn = document.getElementById('removeKeysBtn');
+    removeKeysBtn.addEventListener('click', function () {
+      const transformedUrl = document.getElementById('outputUrl').value.trim();
+      if (!transformedUrl) {
+        alert('Please transform a URL first.');
+        return;
+      }
+  
+      // 1) parse the existing transformed URL
+      const [baseUrl] = transformedUrl.split('?');
+      const currentParams = parseQueryString(transformedUrl);
+  
+      // 2) find which keys were selected
+      const keysToRemoveSelect = document.getElementById('keysToRemoveSelect');
+      const selectedOptions = Array.from(keysToRemoveSelect.selectedOptions).map(opt => opt.value);
+  
+      // 3) remove them from the param object
+      selectedOptions.forEach(k => {
+        delete currentParams[k];
+        // Also remove from our global postParams, so the table stays in sync
+        delete globalPostParams[k];
+      });
+  
+      // 4) rebuild the new final URL
+      const finalUrl = buildUrl(baseUrl, currentParams);
+      document.getElementById('finalUrl').value = finalUrl;
+  
+      // 5) re-populate the dropdown with remaining keys
+      populateKeysDropdown(currentParams);
+    });
+
+    function saveTagToBackend(originalTag, transformedTag, adServer) {
+        fetch('http://127.0.0.1:5000/save_tag', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                original_tag: originalTag,
+                transformed_tag: transformedTag,
+                ad_server: adServer
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Saved to backend:', data);
+        })
+        .catch(err => {
+            console.error('Error saving to backend:', err);
+        });
+    }
+
+  </script>
+</body>
+</html>
