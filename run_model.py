@@ -22,9 +22,8 @@ def decode(seq):
 
 # ---- Predict on any tag ----
 
-# new_tag = sys.argv[1]
+new_tag = sys.argv[1]
 
-new_tag = "https://tv.springserve.com/rt/124231?w=1920&h=1080&cb=[CACHEBUSTER]&ip=[IP]&ua=[USER_AGENT]&dnt=[DO_NOT_TRACK]"
 encoded_input = np.array([encode(new_tag)])
 pred = model.predict(encoded_input)
 pred_seq = np.argmax(pred[0], axis=-1)
